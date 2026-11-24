@@ -119,3 +119,29 @@ Get-AuthenticodeSignature "D:\MiencraftDEV\LimCL\product\LimlinLauncher-0.1.10.e
 - [ ] 证书有效期 1 年，到期前 1 个月续费
 - [ ] 拿到证书后：配置 `tools\signing.local.json` → 跑一次打包 → 用 `Get-AuthenticodeSignature` 确认 `Status=Valid`
 - [ ] 发布首批签名版本后，观察 SmartScreen 警告消失时间（通常数周）
+
+## 7. 能不能复用官方 PCL 的签名？（实测：不能，也不需要）
+
+对仓库内 `最新正式版.zip` 里的官方 exe 实测：
+
+| 项 | 结果 |
+|---|---|
+| 文件 | `Plain Craft Launcher 2.exe`（5.74 MB） |
+| SHA256 | `0DB34E19D9EEB6D496D20FABE786EC16BBD36BA6B0CCDC8D29CB7E909C114397` |
+| `Get-AuthenticodeSignature` | **NotSigned（未签名）** |
+
+结论：
+
+1. **官方 PCL 本身就没有 Authenticode 签名**，所以不存在「原版签名」可以复用；
+   官方用户同样会遇到「未知发布者」，依靠下载渠道与用户信任传播。
+2. 即便换一个已签名的程序，签名也无法移植：
+   - Authenticode 签名是对整个 PE 文件的哈希，**改一个字节即失效**；
+   - 私钥只在上游作者手里，仓库内**没有任何证书/私钥文件**
+     （`Plain Craft Launcher 2_TemporaryKey.pfx` 只是 VS 生成的 ClickOnce 占位引用，文件并不存在）。
+3. 冒用他人证书签名属于伪造发布者身份：CA 一旦发现会吊销证书（连带影响原版用户），
+   并可能涉及法律责任，**绝不可行**。
+
+因此只有两条路：
+
+- **与官方现状一致**：保持不签名，发布页提供 SHA256 + 首次运行引导（当前状态，零成本）
+- **自有证书**：购买 OV 证书后按本文第 3 节接入，体验优于官方
