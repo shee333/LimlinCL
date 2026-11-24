@@ -1195,37 +1195,41 @@ Public Class FormMain
         ''' </summary>
         Download = 1
         ''' <summary>
+        ''' 社区游戏。
+        ''' </summary>
+        Community = 2
+        ''' <summary>
         ''' 联机。
         ''' </summary>
-        Link = 2
+        Link = 3
         ''' <summary>
         ''' 设置。
         ''' </summary>
-        Setup = 3
+        Setup = 4
         ''' <summary>
         ''' 更多。
         ''' </summary>
-        Other = 4
+        Other = 5
         ''' <summary>
         ''' 版本选择。这是一个副页面。
         ''' </summary>
-        InstanceSelect = 5
+        InstanceSelect = 6
         ''' <summary>
         ''' 任务管理。这是一个副页面。
         ''' </summary>
-        TaskManager = 6
+        TaskManager = 7
         ''' <summary>
         ''' 版本设置。这是一个副页面。
         ''' </summary>
-        InstanceSetup = 7
+        InstanceSetup = 8
         ''' <summary>
         ''' 社区资源详情。这是一个副页面。
         ''' </summary>
-        ResourceDetail = 8
+        ResourceDetail = 9
         ''' <summary>
         ''' 帮助详情。这是一个副页面。
         ''' </summary>
-        HelpDetail = 9
+        HelpDetail = 10
     End Enum
     ''' <summary>
     ''' 次要页面种类。其数值必须与 StackPanel 中的下标一致。
@@ -1396,7 +1400,7 @@ Public Class FormMain
     ''' <summary>
     ''' 通过点击导航栏改变页面。
     ''' </summary>
-    Private Sub BtnTitleSelect_Click(sender As MyRadioButton, raiseByMouse As Boolean) Handles BtnTitleSelect0.Check, BtnTitleSelect1.Check, BtnTitleSelect2.Check, BtnTitleSelect3.Check, BtnTitleSelect4.Check
+    Private Sub BtnTitleSelect_Click(sender As MyRadioButton, raiseByMouse As Boolean) Handles BtnTitleSelect0.Check, BtnTitleSelect1.Check, BtnTitleSelect2.Check, BtnTitleSelect3.Check, BtnTitleSelect4.Check, BtnTitleSelect5.Check
         If IsChangingPage Then Return
         PageChangeActual(Val(sender.Tag))
     End Sub
@@ -1475,6 +1479,9 @@ Public Class FormMain
                     If FrmDownloadLeft Is Nothing Then FrmDownloadLeft = New PageDownloadLeft
                     'PageGet 方法会在未设置 SubType 时指定默认值，并建立相关页面的实例
                     PageChangeAnim(FrmDownloadLeft, FrmDownloadLeft.PageGet(SubType))
+                Case PageType.Community '社区游戏
+                    If FrmCommunity Is Nothing Then FrmCommunity = New PageCommunity
+                    PageChangeAnim(New MyPageLeft, FrmCommunity)
                 Case PageType.Link '联机
                     If FrmLinkMain Is Nothing Then FrmLinkMain = New PageLinkMain
                     PageChangeAnim(New MyPageLeft, FrmLinkMain)

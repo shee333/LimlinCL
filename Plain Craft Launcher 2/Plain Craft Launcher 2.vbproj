@@ -257,6 +257,7 @@
     <Compile Include="Modules\ModDevelop.vb" />
     <Compile Include="Modules\Minecraft\ModWatcher.vb" />
     <Compile Include="Modules\ModSecret.vb" />
+    <Compile Include="Modules\ModCommunity.vb" />
     <Compile Include="Modules\ModUpdate.vb" />
     <Compile Include="Pages\PageDownload\Resource\PageResource.xaml.vb">
       <DependentUpon>PageResource.xaml</DependentUpon>
@@ -304,6 +305,9 @@
     </Compile>
     <Compile Include="Pages\PageLaunch\PageLoginNideSkin.xaml.vb">
       <DependentUpon>PageLoginNideSkin.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Pages\PageCommunity\PageCommunity.xaml.vb">
+      <DependentUpon>PageCommunity.xaml</DependentUpon>
     </Compile>
     <Compile Include="Pages\PageLink\PageLinkMain.xaml.vb">
       <DependentUpon>PageLinkMain.xaml</DependentUpon>
@@ -565,6 +569,10 @@
     <None Include="Resources\Custom.xaml">
       <SubType>Designer</SubType>
     </None>
+    <Page Include="Pages\PageCommunity\PageCommunity.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="Pages\PageLink\PageLinkMain.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>

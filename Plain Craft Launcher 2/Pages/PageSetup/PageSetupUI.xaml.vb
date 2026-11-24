@@ -444,9 +444,10 @@ Refresh:
                 '顶部栏未被全部隐藏
                 FrmMain.PanTitleSelect.Visibility = Visibility.Visible
                 FrmMain.BtnTitleSelect1.Visibility = If(Not HiddenForceShow AndAlso Settings.Get(Of Boolean)("UiHiddenPageDownload"), Visibility.Collapsed, Visibility.Visible)
-                FrmMain.BtnTitleSelect2.Visibility = Visibility.Collapsed 'If(Not HiddenForceShow AndAlso Settings.Get(Of Boolean)("UiHiddenPageLink"), Visibility.Collapsed, Visibility.Visible)
-                FrmMain.BtnTitleSelect3.Visibility = If(Not HiddenForceShow AndAlso Settings.Get(Of Boolean)("UiHiddenPageSetup"), Visibility.Collapsed, Visibility.Visible)
-                FrmMain.BtnTitleSelect4.Visibility = If(Not HiddenForceShow AndAlso Settings.Get(Of Boolean)("UiHiddenPageOther"), Visibility.Collapsed, Visibility.Visible)
+                FrmMain.BtnTitleSelect2.Visibility = Visibility.Visible '社区游戏，始终显示
+                FrmMain.BtnTitleSelect3.Visibility = Visibility.Collapsed '联机，始终隐藏
+                FrmMain.BtnTitleSelect4.Visibility = If(Not HiddenForceShow AndAlso Settings.Get(Of Boolean)("UiHiddenPageSetup"), Visibility.Collapsed, Visibility.Visible)
+                FrmMain.BtnTitleSelect5.Visibility = If(Not HiddenForceShow AndAlso Settings.Get(Of Boolean)("UiHiddenPageOther"), Visibility.Collapsed, Visibility.Visible)
             End If
             '功能
             FrmLaunchLeft.RefreshButtonsUI()
@@ -489,14 +490,14 @@ Refresh:
             End If
             If OtherAvaliableCount = 1 AndAlso Not HiddenForceShow Then
                 If Not Settings.Get(Of Boolean)("UiHiddenOtherHelp") Then
-                    FrmMain.BtnTitleSelect4.Text = "帮助"
+                    FrmMain.BtnTitleSelect5.Text = "帮助"
                 ElseIf Not Settings.Get(Of Boolean)("UiHiddenOtherAbout") Then
-                    FrmMain.BtnTitleSelect4.Text = "关于"
+                    FrmMain.BtnTitleSelect5.Text = "关于"
                 Else
-                    FrmMain.BtnTitleSelect4.Text = "百宝箱"
+                    FrmMain.BtnTitleSelect5.Text = "百宝箱"
                 End If
             Else
-                FrmMain.BtnTitleSelect4.Text = "更多"
+                FrmMain.BtnTitleSelect5.Text = "更多"
             End If
             '各个页面的入口
             If FrmMain.PageCurrent = FormMain.PageType.InstanceSelect Then FrmSelectRight.BtnEmptyDownload_Loaded()
