@@ -146,8 +146,9 @@ Friend Module ModSecret
 
 #Region "更新"
 
+    ''' <summary>检查更新：委托给社区更新模块（ModUpdate）。</summary>
     Friend Sub UpdateCheckByButton()
-        Hint("该版本中不包含更新功能……")
+        ModUpdate.CheckByButton()
     End Sub
 
     Friend IsUpdateWaitingRestart As Boolean = False
@@ -174,7 +175,7 @@ Friend Module ModSecret
     ''' </summary>
     Public ServerConfig As JObject
 
-    Public ServerLoader As New LoaderTask(Of Integer, Integer)("PCL 配置更新", Sub() Logger.Info("该版本中不包含更新通知功能……"), Priority:=ThreadPriority.BelowNormal) With
+    Public ServerLoader As New LoaderTask(Of Integer, Integer)("社区更新检查", Sub() ModUpdate.StartBackgroundCheck(), Priority:=ThreadPriority.BelowNormal) With
         {.ReloadTimeout = 1000 * 60 * 60} '超时 1 小时
 
 #End Region
