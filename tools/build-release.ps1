@@ -101,6 +101,69 @@ function Get-NextVersion([string]$version) {
     return ($parts -join '.')
 }
 
+# ---- 代码签名 ----------------------------------------------------------
+# 签名配置优先级：环境变量 > tools\signing.local.json
+# 支持两种证书来源：
+#   1. thumbprint：证书已安装到 Windows 证书存储（EV 硬件 Key 通常是这种）
+#   2. pfxPath + pfxPassword：PFX 文件（OV 证书常见）
+function Load-SigningConfig {
+    $config = [ordered]@{
+        Thumbprint   = ''
+        PfxPath      = ''
+        PfxPassword  = ''
+        TimestampUrl = 'http://timestamp.digicert.com'
+        HashAlgorithm = 'SHA256'
+    }
+    $file = Join-Path $Script:Repo 'tools\signing.local.json'
+    if (Test-Path $file) {
+        try {
+            $json = Get-Content $file -Raw -Encoding UTF8 | ConvertFrom-Json
+            foreach ($key in @($config.Keys)) {
+                if ($null -ne $json.$key -and "$($json.$key)" -ne '') { $config[$key] = "$($json.$key)" }
+            }
+        } catch {
+            Write-Host "   [签名] 读取 signing.local.json 失败：$($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    }
+    if ($env:LIMLIN_SIGN_THUMBPRINT)      { $config.Thumbprint = $env:LIMLIN_SIGN_THUMBPRINT }
+    if ($env:LIMLIN_SIGN_PFX)             { $config.PfxPath = $env:LIMLIN_SIGN_PFX }
+    if ($env:LIMLIN_SIGN_PFX_PASSWORD)    { $config.PfxPassword = $env:LIMLIN_SIGN_PFX_PASSWORD }
+    if ($env:LIMLIN_SIGN_TIMESTAMP)       { $config.TimestampUrl = $env:LIMLIN_SIGN_TIMESTAMP }
+    return [pscustomobject]$config
+}
+
+function Get-SigningCertificate($config) {
+    if ($config.Thumbprint) {
+        $thumb = ($config.Thumbprint -replace '\s', '')
+        foreach ($store in @('Cert:\CurrentUser\My', 'Cert:\LocalMachine\My')) {
+            $cert = Get-ChildItem $store -ErrorAction SilentlyContinue |
+                Where-Object { $_.Thumbprint -eq $thumb } | Select-Object -First 1
+            if ($cert) { return $cert }
+        }
+        throw "未在证书存储中找到指纹为 $thumb 的证书"
+    }
+    if ($config.PfxPath) {
+        if (-not (Test-Path $config.PfxPath)) { throw "证书文件不存在：$($config.PfxPath)" }
+        return New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($config.PfxPath, $config.PfxPassword)
+    }
+    return $null
+}
+
+# 对 exe 签名；失败只告警，不中断打包
+function Invoke-SignExe([string]$path, $config, $cert) {
+    Write-Step '对产物进行代码签名'
+    try {
+        $result = Set-AuthenticodeSignature -FilePath $path -Certificate $cert `
+            -TimestampServer $config.TimestampUrl -HashAlgorithm $config.HashAlgorithm
+        if ($result.Status -eq 'Valid') {
+            Write-Ok "签名完成：$($cert.Subject)"
+        } else {
+            Write-Host "   签名已写入但状态为 $($result.Status)：$($result.StatusMessage)" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "   签名失败：$($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
 # ---- 主流程 -----------------------------------------------------------
 if (-not (Test-Path $Script:Project))  { throw "未找到项目文件：$Script:Project" }
 if (-not (Test-Path $Script:ModBase))  { throw "未找到 ModBase.vb：$Script:ModBase" }
@@ -152,11 +215,31 @@ if ((Get-Item $Script:OutputExe).LastWriteTime -lt $buildStart.AddMinutes(-1)) {
 
 $target = Join-Path $ProductDir "$Script:AppName-$version.exe"
 Copy-Item $Script:OutputExe $target -Force
+
+# 代码签名（未配置证书时跳过）
+$signConfig = Load-SigningConfig
+$signCert = $null
+try {
+    $signCert = Get-SigningCertificate $signConfig
+} catch {
+    Write-Host "   [签名] $($_.Exception.Message)" -ForegroundColor Yellow
+}
+if ($signCert) {
+    Invoke-SignExe $target $signConfig $signCert
+} else {
+    Write-Host '   未配置代码签名证书，产物未签名（SmartScreen 会提示「未知发布者」）' -ForegroundColor DarkYellow
+    Write-Host '   配置方法见 tools\signing.local.example.json' -ForegroundColor DarkGray
+}
+
 $size = [math]::Round((Get-Item $target).Length / 1MB, 2)
 
 Write-Host ''
 Write-Ok "版本 $version"
 Write-Ok "产物 $target  ($size MB)"
+$signature = Get-AuthenticodeSignature $target
+$signerText = if ($signature.SignerCertificate) { "（$($signature.SignerCertificate.Subject)）" } else { '' }
+Write-Ok "签名状态 $($signature.Status)$signerText"
+Write-Host "   SHA256：$((Get-FileHash $target -Algorithm SHA256).Hash)" -ForegroundColor DarkGray
 Write-Host ''
 Write-Host "提示：版本号已写入 ModBase.vb（VersionBaseName / VersionCode），记得随代码一起提交。" -ForegroundColor DarkGray
 

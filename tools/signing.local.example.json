@@ -1,0 +1,9 @@
+{
+  "_说明": "复制本文件为 signing.local.json 后填写。signing.local.json 已被 .gitignore 忽略，不会提交。",
+  "_证书来源": "thumbprint（证书已装入 Windows 证书存储，EV 硬件 Key 用这个）与 pfxPath 二选一，thumbprint 优先。",
+  "thumbprint": "",
+  "pfxPath": "D:\\certs\\limlin-code-signing.pfx",
+  "pfxPassword": "",
+  "timestampUrl": "http://timestamp.digicert.com",
+  "hashAlgorithm": "SHA256"
+}
