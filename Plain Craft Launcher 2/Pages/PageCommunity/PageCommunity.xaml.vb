@@ -7,16 +7,56 @@ Public Class PageCommunity
 
     Private ReadOnly Cards As New List(Of CommunityServerCard)
     Private IsQuerying As Boolean = False
+    Private IsSyncing As Boolean = False
     Private IsFirstLoaded As Boolean = False
+    ''' <summary>刷新令牌：强制重建时让旧查询结果失效。</summary>
+    Private QueryToken As Integer = 0
 
     Private Sub Init() Handles Me.Loaded
         If IsFirstLoaded Then Return
         IsFirstLoaded = True
         RefreshAll()
+        If ModCommunitySync.IsSyncDue() Then StartSync(False)
     End Sub
 
     Private Sub PageEntered() Handles Me.PageEnter
-        If IsFirstLoaded AndAlso Not IsQuerying Then RefreshAll()
+        If Not IsFirstLoaded Then Return
+        If Not IsQuerying Then RefreshAll()
+        If ModCommunitySync.IsSyncDue() Then StartSync(False)
+    End Sub
+
+    ''' <summary>检查社区列表更新（Force=True 为用户手动触发）。</summary>
+    Private Sub StartSync(Force As Boolean)
+        If IsSyncing Then Return
+        IsSyncing = True
+        BtnCheckUpdate.IsEnabled = False
+        LabSyncInfo.Text = "正在检查列表更新……"
+        RunInNewThread(
+            Sub()
+                Dim Result As CommunitySyncResult
+                Try
+                    Result = ModCommunitySync.TrySync(Force)
+                Catch ex As Exception
+                    Logger.Error(ex, "社区列表同步异常")
+                    Result = New CommunitySyncResult With {.Message = "同步失败：" & ex.Message}
+                End Try
+                RunInUi(
+                    Sub()
+                        IsSyncing = False
+                        BtnCheckUpdate.IsEnabled = True
+                        LabSyncInfo.Text = ModCommunitySync.GetStatusText()
+                        If Result.Updated Then
+                            Hint(Result.Message, HintType.Green)
+                            RefreshAll(ForceRebuild:=True)
+                        ElseIf Force Then
+                            Hint(Result.Message, If(Result.Ok, HintType.Blue, HintType.Red))
+                        End If
+                    End Sub)
+            End Sub, "社区列表同步", ThreadPriority.BelowNormal)
+    End Sub
+
+    Private Sub BtnCheckUpdate_Click(sender As Object, e As MouseButtonEventArgs) Handles BtnCheckUpdate.Click
+        StartSync(True)
     End Sub
 
     Private Sub BtnRefresh_Click(sender As Object, e As MouseButtonEventArgs) Handles BtnRefresh.Click
@@ -30,9 +70,11 @@ Public Class PageCommunity
     End Sub
 
     ''' <summary>重新加载列表并查询所有服务器状态。</summary>
-    Private Sub RefreshAll()
-        If IsQuerying Then Return
+    Private Sub RefreshAll(Optional ForceRebuild As Boolean = False)
+        If IsQuerying AndAlso Not ForceRebuild Then Return
         IsQuerying = True
+        QueryToken += 1
+        Dim Token As Integer = QueryToken
         BtnRefresh.IsEnabled = False
         LabRefreshTime.Text = "正在查询服务器状态……"
         PanServers.Children.Clear()
@@ -62,20 +104,36 @@ Public Class PageCommunity
 
         RunInNewThread(
             Sub()
-                Dim Results As Dictionary(Of String, ModCommunity.CommunityServerStatus)
-                Try
-                    Results = ModCommunity.QueryServers(Servers)
-                Catch ex As Exception
-                    Logger.Error(ex, "查询社区服务器状态失败")
-                    Results = New Dictionary(Of String, ModCommunity.CommunityServerStatus)
-                End Try
+                '逐台查询并即时刷新对应卡片，避免单台离线拖慢整个页面
+                Dim Semaphore As New SemaphoreSlim(ModCommunity.MaxConcurrentQueries, ModCommunity.MaxConcurrentQueries)
+                Dim Tasks As Threading.Tasks.Task() = Servers.Select(
+                    Function(Server) Threading.Tasks.Task.Run(
+                        Sub()
+                            Semaphore.Wait()
+                            Try
+                                Dim Status As ModCommunity.CommunityServerStatus
+                                Try
+                                    Status = ModCommunity.QueryServer(Server)
+                                Catch ex As Exception
+                                    Logger.Error(ex, $"查询服务器状态失败：{Server.Name}")
+                                    Status = New ModCommunity.CommunityServerStatus With {.Message = ex.Message}
+                                End Try
+                                RunInUi(
+                                    Sub()
+                                        If Token <> QueryToken Then Return
+                                        Dim Card As CommunityServerCard = Cards.FirstOrDefault(Function(c) c.Server.Id = Server.Id)
+                                        If Card IsNot Nothing Then Card.ApplyStatus(Status)
+                                    End Sub)
+                            Finally
+                                Semaphore.Release()
+                            End Try
+                        End Sub)).ToArray()
+                Threading.Tasks.Task.WaitAll(Tasks)
                 RunInUi(
                     Sub()
-                        For Each Card In Cards
-                            Dim Status As ModCommunity.CommunityServerStatus = Nothing
-                            If Results.TryGetValue(Card.Server.Id, Status) Then Card.ApplyStatus(Status)
-                        Next
+                        If Token <> QueryToken Then Return '已被更新的刷新取代
                         LabRefreshTime.Text = "最后更新：" & Date.Now.ToString("HH:mm:ss")
+                        LabSyncInfo.Text = ModCommunitySync.GetStatusText()
                         BtnRefresh.IsEnabled = True
                         IsQuerying = False
                     End Sub)
