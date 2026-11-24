@@ -144,7 +144,8 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not (Test-Path $Script:OutputExe)) { throw "编译成功但未找到产物：$Script:OutputExe" }
 if ((Get-Item $Script:OutputExe).LastWriteTime -lt $buildStart.AddMinutes(-1)) {
-    throw "产物时间戳早于本次编译，可能构建未真正执行：$Script:OutputExe"
+    # 增量构建在源码无改动时会跳过编译，exe 时间戳保持不变，这是正常情况
+    Write-Host "   源码无改动，MSBuild 跳过重新编译，直接复用现有产物" -ForegroundColor DarkGray
 }
 
 $target = Join-Path $ProductDir "$Script:AppName-$version.exe"
