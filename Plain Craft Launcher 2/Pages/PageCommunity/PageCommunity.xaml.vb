@@ -203,6 +203,7 @@ Public Class CommunityServerCard
     Public ReadOnly Server As ModCommunity.CommunityServer
 
     Private ReadOnly LabStatus As TextBlock
+    Private ReadOnly LabAddress As TextBlock
     Private ReadOnly LabMotd As TextBlock
     Private ReadOnly LabPlayers As TextBlock
     Private ReadOnly LabNotes As TextBlock
@@ -228,12 +229,13 @@ Public Class CommunityServerCard
         '地址与分组
         Dim AddressText As String = Server.DisplayAddress
         If Not String.IsNullOrWhiteSpace(Server.Group) Then AddressText &= $"（{Server.Group}）"
-        Dim LabAddress As New TextBlock With {
+        LabAddress = New TextBlock With {
             .Text = AddressText,
             .FontSize = 12.5,
             .Opacity = 0.7,
             .Margin = New Thickness(0, 5, 0, 0)
         }
+        If Server.UseSrv Then LabAddress.ToolTip = "已通过 SRV 记录隐藏端口"
         Panel.Children.Add(LabAddress)
 
         'MOTD
@@ -294,6 +296,9 @@ Public Class CommunityServerCard
     ''' <summary>把查询结果刷新到界面上。</summary>
     Public Sub ApplyStatus(Status As ModCommunity.CommunityServerStatus)
         If Status Is Nothing Then Return
+        If Not String.IsNullOrEmpty(Status.ResolvedAddress) Then
+            LabAddress.ToolTip = $"SRV 解析目标：{Status.ResolvedAddress}"
+        End If
         If Status.Ok Then
             LabStatus.Text = $"● 在线    {Status.Online} / {Status.Max} 名玩家    延迟 {Status.Latency} ms" &
                              If(String.IsNullOrWhiteSpace(Status.VersionName), "", $"    {Status.VersionName}")

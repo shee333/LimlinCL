@@ -100,7 +100,8 @@ Write-Host ''
 Write-Host '服务器清单：'
 foreach ($server in @($json.servers)) {
     $state = if ($server.enabled -eq $false) { '（已下架）' } else { '' }
-    Write-Host ("  - {0}  {1}:{2}  {3}{4}" -f $server.name, $server.ip, $(if ($server.port) { $server.port } else { 25565 }), $server.group, $state)
+    $addr = if ($server.port) { "$($server.ip):$($server.port)" } elseif ($server.useSrv -ne $false) { "$($server.ip)（SRV）" } else { "$($server.ip):25565" }
+    Write-Host ("  - {0}  {1}  {2}{3}" -f $server.name, $addr, $server.group, $state)
 }
 Write-Host ''
 

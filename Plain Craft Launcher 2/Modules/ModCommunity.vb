@@ -1,6 +1,7 @@
 ﻿Imports System.IO
 Imports System.Net.Sockets
 Imports System.Text
+Imports System.Runtime.InteropServices
 Imports System.Threading
 
 ''' <summary>
@@ -58,9 +59,13 @@ Public Module ModCommunity
         Public GameVersion As String = ""
         ''' <summary>建议的 Mod 加载器（展示用，为一键加入预留）。</summary>
         Public GameLoader As String = ""
+        ''' <summary>是否通过 _minecraft._tcp SRV 记录解析真实地址（用于隐藏端口）。</summary>
+        Public UseSrv As Boolean = False
 
+        ''' <summary>对外展示的地址：使用 SRV 时只显示域名。</summary>
         Public ReadOnly Property DisplayAddress As String
             Get
+                If UseSrv Then Return Ip
                 Return If(Port = 25565, Ip, $"{Ip}:{Port}")
             End Get
         End Property
@@ -95,6 +100,8 @@ Public Module ModCommunity
         Public Latency As Long = -1
         ''' <summary>MOTD，按行组织。</summary>
         Public Motd As New List(Of List(Of MotdPart))
+        ''' <summary>SRV 解析出的真实地址（未使用 SRV 时为 Nothing）。</summary>
+        Public ResolvedAddress As String = Nothing
         Public CheckedAt As Date = Date.Now
     End Class
 
@@ -137,7 +144,15 @@ Public Module ModCommunity
                     Server.Name = GetJsonString(Item, "name")
                     Server.Group = GetJsonString(Item, "group")
                     Server.Ip = GetJsonString(Item, "ip")
-                    Server.Port = GetJsonInteger(Item, "port", 25565)
+                    Server.UseSrv = GetJsonBoolean(Item, "useSrv", False)
+                    Dim RawPort As Integer = GetJsonInteger(Item, "port", 0)
+                    If RawPort > 0 Then
+                        Server.Port = RawPort
+                    Else
+                        Server.Port = 25565
+                        If Item("useSrv") Is Nothing Then Server.UseSrv = True '未写端口且未显式关闭 SRV 时，默认走 SRV
+                    End If
+                    If Server.UseSrv AndAlso Server.Port <> 25565 Then Server.UseSrv = False '显式写了端口则不使用 SRV
                     Server.Notes = GetJsonString(Item, "notes")
                     Server.Order = GetJsonInteger(Item, "order", 0)
                     Server.Enabled = GetJsonBoolean(Item, "enabled", True)
@@ -245,6 +260,18 @@ Public Module ModCommunity
             Port = CInt(Val(Parts(1)))
         End If
         If Port <= 0 OrElse Port > 65535 Then Port = 25565
+        '使用 SRV 记录解析真实地址（用于隐藏端口）
+        Dim ResolvedAddress As String = Nothing
+        If Server.UseSrv Then
+            Dim SrvRecord As SrvRecord = ResolveSrv(Host)
+            If SrvRecord IsNot Nothing Then
+                ResolvedAddress = $"{SrvRecord.Target}:{SrvRecord.Port}"
+                Host = SrvRecord.Target
+                Port = SrvRecord.Port
+            Else
+                Logger.Info($"SRV 解析无结果，按默认端口连接：{Host}")
+            End If
+        End If
 
         Dim LastException As Exception = Nothing
         For Attempt As Integer = 1 To 2
@@ -283,6 +310,7 @@ Public Module ModCommunity
                     Dim Json As JObject = Encoding.UTF8.GetString(Buffer).DeserializeJson()
                     Stopwatch.Stop()
                     Result.Latency = Stopwatch.ElapsedMilliseconds
+                    Result.ResolvedAddress = ResolvedAddress
                     If Json Is Nothing Then Throw New Exception("响应内容为空")
                     ParseStatusJson(Json, Result)
                     Result.Ok = True
@@ -551,6 +579,186 @@ Public Module ModCommunity
             Offset += Count
         End While
     End Sub
+
+#End Region
+
+#Region "SRV 解析"
+
+    ''' <summary>一条 SRV 记录。</summary>
+    Private Class SrvRecord
+        Public Target As String = ""
+        Public Port As Integer = 25565
+        Public Priority As Integer = 0
+        Public Weight As Integer = 0
+    End Class
+
+    ''' <summary>
+    ''' 查询 _minecraft._tcp.&lt;域名&gt; 的 SRV 记录。失败或无记录时返回 Nothing。
+    ''' <para>使用自实现的 UDP DNS 查询，避免 DnsQuery 结构体在不同系统/位数下的布局差异。</para>
+    ''' </summary>
+    Private Function ResolveSrv(Name As String) As SrvRecord
+        Dim QueryName As String = "_minecraft._tcp." & Name.Trim().TrimEnd("."c)
+        For Each Server As System.Net.IPAddress In GetDnsServers()
+            Try
+                Dim Response As Byte() = QueryDnsUdp(Server, QueryName, 33)
+                Dim Records As List(Of SrvRecord) = ParseSrvRecords(Response)
+                If Records.Count = 0 Then Continue For
+                Dim Best As SrvRecord = Nothing
+                For Each Record As SrvRecord In Records
+                    If Best Is Nothing OrElse Record.Priority < Best.Priority OrElse
+                       (Record.Priority = Best.Priority AndAlso Record.Weight > Best.Weight) Then Best = Record
+                Next
+                If Best IsNot Nothing Then
+                    Logger.Info($"SRV 解析：{Name} → {Best.Target}:{Best.Port}（priority {Best.Priority} weight {Best.Weight}，DNS {Server}）")
+                    Return Best
+                End If
+            Catch ex As Exception
+                Logger.Info($"SRV 查询失败（DNS {Server}）：{ex.Message}")
+            End Try
+        Next
+        Logger.Info($"SRV 查询无结果：{QueryName}")
+        Return Nothing
+    End Function
+
+    ''' <summary>获取系统配置的 DNS 服务器（IPv4），失败时使用国内公共 DNS。</summary>
+    Private Function GetDnsServers() As List(Of System.Net.IPAddress)
+        Dim Result As New List(Of System.Net.IPAddress)
+        Try
+            For Each Adapter As System.Net.NetworkInformation.NetworkInterface In System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                If Adapter.OperationalStatus <> System.Net.NetworkInformation.OperationalStatus.Up Then Continue For
+                For Each Address As System.Net.IPAddress In Adapter.GetIPProperties().DnsAddresses
+                    If Address.AddressFamily = System.Net.Sockets.AddressFamily.InterNetwork AndAlso Not Result.Contains(Address) Then Result.Add(Address)
+                Next
+            Next
+        Catch ex As Exception
+            Logger.Warn(ex, "获取系统 DNS 服务器失败")
+        End Try
+        If Result.Count = 0 Then
+            Result.Add(System.Net.IPAddress.Parse("223.5.5.5"))
+            Result.Add(System.Net.IPAddress.Parse("119.29.29.29"))
+        End If
+        Return Result
+    End Function
+
+    ''' <summary>发送一次 UDP DNS 查询并返回原始响应。</summary>
+    Private Function QueryDnsUdp(Server As System.Net.IPAddress, QueryName As String, RecordType As Integer) As Byte()
+        Dim Packet As Byte() = BuildDnsQuery(QueryName, RecordType)
+        Using Client As New System.Net.Sockets.UdpClient()
+            Client.Client.SendTimeout = 2500
+            Client.Client.ReceiveTimeout = 2500
+            Client.Connect(Server, 53)
+            Client.Send(Packet, Packet.Length)
+            Dim Remote As New System.Net.IPEndPoint(System.Net.IPAddress.Any, 0)
+            Return Client.Receive(Remote)
+        End Using
+    End Function
+
+    ''' <summary>构造 SRV 查询报文（标准查询，递归请求）。</summary>
+    Private Function BuildDnsQuery(QueryName As String, RecordType As Integer) As Byte()
+        Using Stream As New MemoryStream()
+            WriteUInt16(Stream, RandomInteger(0, 65535)) '事务 ID
+            WriteUInt16(Stream, &H100) '标准查询 + 递归请求
+            WriteUInt16(Stream, 1) 'QDCOUNT
+            WriteUInt16(Stream, 0) 'ANCOUNT
+            WriteUInt16(Stream, 0) 'NSCOUNT
+            WriteUInt16(Stream, 0) 'ARCOUNT
+            For Each Label As String In QueryName.Split("."c)
+                Dim Bytes As Byte() = System.Text.Encoding.ASCII.GetBytes(Label)
+                Stream.WriteByte(CByte(Bytes.Length))
+                Stream.Write(Bytes, 0, Bytes.Length)
+            Next
+            Stream.WriteByte(0)
+            WriteUInt16(Stream, RecordType)
+            WriteUInt16(Stream, 1) 'IN
+            Return Stream.ToArray()
+        End Using
+    End Function
+
+    ''' <summary>解析 DNS 响应中的 SRV 记录。</summary>
+    Private Function ParseSrvRecords(Data As Byte()) As List(Of SrvRecord)
+        Dim Result As New List(Of SrvRecord)
+        If Data Is Nothing OrElse Data.Length < 12 Then Return Result
+        If (Data(3) And &H0F) <> 0 Then Return Result 'RCODE 非 0 视为失败
+        Dim QuestionCount As Integer = ReadUInt16(Data, 4)
+        Dim AnswerCount As Integer = ReadUInt16(Data, 6)
+        Dim Offset As Integer = 12
+        For Index As Integer = 1 To QuestionCount
+            Dim ReadOffset As Integer = Offset
+            ReadDnsName(Data, ReadOffset)
+            Offset = ReadOffset + 4
+        Next
+        For Index As Integer = 1 To AnswerCount
+            If Offset + 10 > Data.Length Then Exit For
+            Dim ReadOffset As Integer = Offset
+            ReadDnsName(Data, ReadOffset)
+            Offset = ReadOffset
+            Dim RecordType As Integer = ReadUInt16(Data, Offset)
+            Offset += 2
+            Offset += 2 'CLASS
+            Offset += 4 'TTL
+            Dim DataLength As Integer = ReadUInt16(Data, Offset)
+            Offset += 2
+            If Offset + DataLength > Data.Length Then Exit For
+            If RecordType = 33 AndAlso DataLength >= 7 Then
+                Dim Priority As Integer = ReadUInt16(Data, Offset)
+                Dim Weight As Integer = ReadUInt16(Data, Offset + 2)
+                Dim Port As Integer = ReadUInt16(Data, Offset + 4)
+                Dim TargetOffset As Integer = Offset + 6
+                Dim Target As String = ReadDnsName(Data, TargetOffset).TrimEnd("."c)
+                If Target.Length > 0 Then
+                    Result.Add(New SrvRecord With {
+                        .Target = Target,
+                        .Port = If(Port > 0, Port, 25565),
+                        .Priority = Priority,
+                        .Weight = Weight
+                    })
+                End If
+            End If
+            Offset += DataLength
+        Next
+        Return Result
+    End Function
+
+    ''' <summary>读取 DNS 域名（支持压缩指针）。</summary>
+    Private Function ReadDnsName(Data As Byte(), ByRef Offset As Integer) As String
+        Dim Parts As New List(Of String)
+        Dim Position As Integer = Offset
+        Dim Jumped As Boolean = False
+        Dim Guard As Integer = 0
+        While Position < Data.Length
+            Guard += 1
+            If Guard > 128 Then Exit While
+            Dim Length As Integer = Data(Position)
+            If (Length And &HC0) = &HC0 Then
+                If Position + 1 >= Data.Length Then Exit While
+                Dim Pointer As Integer = ((Length And &H3F) << 8) Or Data(Position + 1)
+                If Not Jumped Then
+                    Offset = Position + 2
+                    Jumped = True
+                End If
+                Position = Pointer
+            ElseIf Length = 0 Then
+                If Not Jumped Then Offset = Position + 1
+                Exit While
+            Else
+                Position += 1
+                If Position + Length > Data.Length Then Exit While
+                Parts.Add(System.Text.Encoding.ASCII.GetString(Data, Position, Length))
+                Position += Length
+            End If
+        End While
+        Return String.Join(".", Parts)
+    End Function
+
+    Private Sub WriteUInt16(Stream As Stream, Value As Integer)
+        Stream.WriteByte(CByte((Value >> 8) And &HFF))
+        Stream.WriteByte(CByte(Value And &HFF))
+    End Sub
+
+    Private Function ReadUInt16(Data As Byte(), Offset As Integer) As Integer
+        If Offset < 0 OrElse Offset + 1 >= Data.Length Then Return 0
+        Return (CInt(Data(Offset)) << 8) Or CInt(Data(Offset + 1))
+    End Function
 
 #End Region
 

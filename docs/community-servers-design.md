@@ -415,3 +415,29 @@ Else → --server <ip> --port <port>
 客户端内置源列表按顺序尝试，任一成功即用；证书与数据都用 HTTPS + 签名校验，不依赖单一域名安全。
 
 **GitOps 流程不变**：管理员改 Git 仓库中的 `servers.json` → CI 校验/签名 → 上传到 COS + EdgeOne 两个位置。
+### 3.3 SRV 记录：隐藏真实端口（已实现）
+
+若不想暴露真实 IP 与端口，可给域名配置 SRV 记录：
+
+```
+_minecraft._tcp.mod.limlin.art.  SRV  5 0 32407 nop.mc6.cn.
+```
+
+客户端写法（`servers.json` 中省略 `port`，或显式 `"useSrv": true`）：
+
+```jsonc
+{
+  "id": "limlin-main",
+  "name": "栎木主世界",
+  "ip": "mod.limlin.art",   // 只写域名
+  "group": "生存"
+  // 不写 port → 自动查询 _minecraft._tcp.mod.limlin.art
+}
+```
+
+行为：
+
+- 查询 SRV 记录，用返回的目标与端口做 MOTD 查询
+- **界面只显示域名**（不含端口），鼠标悬停可看到实际解析目标
+- SRV 无记录/查询失败 → 回退到 `域名:25565`
+- 显式写了 `port` → 不使用 SRV，按指定端口直连
