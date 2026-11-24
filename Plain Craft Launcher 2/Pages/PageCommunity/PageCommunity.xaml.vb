@@ -11,6 +11,11 @@ Public Class PageCommunity
     Private IsFirstLoaded As Boolean = False
     ''' <summary>刷新令牌：强制重建时让旧查询结果失效。</summary>
     Private QueryToken As Integer = 0
+    ''' <summary>手动检查更新后的冷却截止时间。</summary>
+    Private SyncCooldownUntil As Date = Date.MinValue
+    Private IsCooldownRunning As Boolean = False
+    Private Const SyncCooldownSeconds As Integer = 15
+    Private Const CheckUpdateButtonText As String = "检查列表更新"
 
     Private Sub Init() Handles Me.Loaded
         If IsFirstLoaded Then Return
@@ -28,6 +33,11 @@ Public Class PageCommunity
     ''' <summary>检查社区列表更新（Force=True 为用户手动触发）。</summary>
     Private Sub StartSync(Force As Boolean)
         If IsSyncing Then Return
+        If Force AndAlso SyncCooldownUntil > Date.Now Then
+            Dim RemainSeconds As Integer = CInt(Math.Ceiling((SyncCooldownUntil - Date.Now).TotalSeconds))
+            Hint($"操作过于频繁，请 {RemainSeconds} 秒后再试", HintType.Blue)
+            Return
+        End If
         IsSyncing = True
         BtnCheckUpdate.IsEnabled = False
         LabSyncInfo.Text = "正在检查列表更新……"
@@ -43,7 +53,11 @@ Public Class PageCommunity
                 RunInUi(
                     Sub()
                         IsSyncing = False
-                        BtnCheckUpdate.IsEnabled = True
+                        If Force Then
+                            StartCooldown()
+                        Else
+                            BtnCheckUpdate.IsEnabled = True
+                        End If
                         LabSyncInfo.Text = ModCommunitySync.GetStatusText()
                         If Result.Updated Then
                             Hint(Result.Message, HintType.Green)
@@ -57,6 +71,32 @@ Public Class PageCommunity
 
     Private Sub BtnCheckUpdate_Click(sender As Object, e As MouseButtonEventArgs) Handles BtnCheckUpdate.Click
         StartSync(True)
+    End Sub
+
+    ''' <summary>手动检查后的冷却倒计时（防止频繁点击）。</summary>
+    Private Sub StartCooldown()
+        SyncCooldownUntil = Date.Now.AddSeconds(SyncCooldownSeconds)
+        If IsCooldownRunning Then Return
+        IsCooldownRunning = True
+        BtnCheckUpdate.IsEnabled = False
+        BtnCheckUpdate.Text = $"请稍候（{SyncCooldownSeconds}s）"
+        BtnCheckUpdate.ToolTip = "冷却中，请等待倒计时结束"
+        RunInNewThread(
+            Sub()
+                While SyncCooldownUntil > Date.Now
+                    Dim RemainSeconds As Integer = Math.Max(1, CInt(Math.Ceiling((SyncCooldownUntil - Date.Now).TotalSeconds)))
+                    Dim Text As String = $"请稍候（{RemainSeconds}s）"
+                    RunInUi(Sub() If IsCooldownRunning Then BtnCheckUpdate.Text = Text)
+                    Thread.Sleep(1000)
+                End While
+                RunInUi(
+                    Sub()
+                        IsCooldownRunning = False
+                        BtnCheckUpdate.Text = CheckUpdateButtonText
+                        BtnCheckUpdate.ToolTip = "从社区托管地址同步最新服务器列表（新增、修改、删除）"
+                        If Not IsSyncing Then BtnCheckUpdate.IsEnabled = True
+                    End Sub)
+            End Sub, "社区列表更新冷却", ThreadPriority.BelowNormal)
     End Sub
 
     Private Sub BtnRefresh_Click(sender As Object, e As MouseButtonEventArgs) Handles BtnRefresh.Click
