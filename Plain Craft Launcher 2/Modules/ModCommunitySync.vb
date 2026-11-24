@@ -27,7 +27,7 @@ Public Module ModCommunitySync
     ''' 可配置多个作为备用源，按顺序尝试。
     ''' </summary>
     Public ReadOnly DefaultSourceUrls As String() = {
-        "https://YOUR-BUCKET-1250000000.cos.ap-guangzhou.myqcloud.com/launcher/community/servers.json"
+        "https://limlinlauncher-1254351530.cos.ap-shanghai.myqcloud.com/launcher/community/servers.json"
     }
 
     ''' <summary>自动检查的间隔（分钟）。</summary>
@@ -154,6 +154,7 @@ Public Module ModCommunitySync
             Try
                 Logger.Info($"社区列表同步：请求 {Url}")
                 Dim Content As String = NetRequestByClientRetry(Url, Headers:={{"Cache-Control", "no-cache"}})
+                Content = Content.TrimStart(ChrW(&HFEFF), ChrW(&H200B)) '兼容带 BOM 的托管文件
                 Dim Json As JObject = Content.DeserializeJson()
                 Dim ValidateError As String = ValidateSnapshot(Json)
                 If ValidateError IsNot Nothing Then

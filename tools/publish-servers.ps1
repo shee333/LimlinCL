@@ -46,7 +46,7 @@ function Write-Ok([string]$text) { Write-Host "   $text" -ForegroundColor Green 
 if (-not (Test-Path $Path)) { throw "文件不存在：$Path" }
 
 Write-Step "读取并校验 $Path"
-$raw = [System.IO.File]::ReadAllText((Resolve-Path $Path), [System.Text.Encoding]::UTF8)
+$raw = [System.IO.File]::ReadAllText((Resolve-Path $Path), [System.Text.Encoding]::UTF8).TrimStart([char]0xFEFF)
 try { $json = $raw | ConvertFrom-Json } catch { throw "JSON 语法错误：$($_.Exception.Message)" }
 
 # ---- 结构校验 ----
@@ -84,7 +84,8 @@ Write-Ok "校验通过：$($json.servers.Count) 台服务器，revision $($json.
 if ($Bump) {
     $json.revision = [int]$json.revision + 1
     $json.updatedAt = (Get-Date).ToString('yyyy-MM-ddTHH:mm:sszzz')
-    $json | ConvertTo-Json -Depth 10 | Set-Content -Path $Path -Encoding UTF8
+    $jsonText = $json | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText((Resolve-Path $Path), $jsonText, (New-Object System.Text.UTF8Encoding($false)))
     Write-Ok "revision 已递增到 $($json.revision)，updatedAt 已刷新"
 }
 
@@ -105,33 +106,86 @@ foreach ($server in @($json.servers)) {
 }
 Write-Host ''
 
-# ---- 上传到 COS ----
+# ---- 上传到 COS（原生 REST API，无需 coscli） ----
+
+function Get-CosAuthorization {
+    param([string]$SecretId, [string]$SecretKey, [string]$HostName, [string]$UriPath)
+    $start = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $keyTime = "$start;$($start + 900)"
+    # SignKey = hex(HMAC-SHA1(SecretKey, KeyTime))
+    $hmac1 = New-Object System.Security.Cryptography.HMACSHA1(,[Text.Encoding]::UTF8.GetBytes($SecretKey))
+    $signKeyBytes = $hmac1.ComputeHash([Text.Encoding]::UTF8.GetBytes($keyTime))
+    $signKey = (($signKeyBytes | ForEach-Object { $_.ToString('x2') }) -join '')
+    # HttpString = method + "\n" + path + "\n" + params + "\n" + headers + "\n"
+    $httpString = "put`n$UriPath`n`nhost=$HostName`n"
+    $sha1 = [System.Security.Cryptography.SHA1]::Create()
+    $httpHash = (($sha1.ComputeHash([Text.Encoding]::UTF8.GetBytes($httpString)) | ForEach-Object { $_.ToString('x2') }) -join '')
+    $stringToSign = "sha1`n$keyTime`n$httpHash`n"
+    $hmac2 = New-Object System.Security.Cryptography.HMACSHA1(,[Text.Encoding]::UTF8.GetBytes($signKey))
+    $signature = (($hmac2.ComputeHash([Text.Encoding]::UTF8.GetBytes($stringToSign)) | ForEach-Object { $_.ToString('x2') }) -join '')
+    return "q-sign-algorithm=sha1&q-ak=$SecretId&q-sign-time=$keyTime&q-key-time=$keyTime&q-header-list=host&q-url-param-list=&q-signature=$signature"
+}
+
 if ($Upload) {
     Write-Step '上传到腾讯云 COS'
-    $bucket = $env:LIMLIN_COS_BUCKET
-    $key = if ($env:LIMLIN_COS_KEY) { $env:LIMLIN_COS_KEY } else { 'launcher/community/servers.json' }
-    if (-not $bucket) { throw '未设置 $env:LIMLIN_COS_BUCKET（形如 bucket-1250000000）' }
-    $coscli = Get-Command coscli -ErrorAction SilentlyContinue
-    if (-not $coscli) {
-        Write-Host '   未找到 coscli，手动上传方法：' -ForegroundColor Yellow
-        Write-Host "   1. 打开 COS 控制台 → 存储桶 $bucket → 对象存储 → 上传"
-        Write-Host "   2. 上传到 $key（覆盖旧文件）"
-        Write-Host '   3. 建议设置响应头 Cache-Control: max-age=60'
-        Write-Host '   安装 coscli：https://cloud.tencent.com/document/product/436/63144'
-        exit 0
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    $cosPath = Join-Path $PSScriptRoot 'cos.local.json'
+    $cos = $null
+    if (Test-Path $cosPath) { $cos = Get-Content $cosPath -Raw -Encoding UTF8 | ConvertFrom-Json }
+
+    $bucket    = if ($env:LIMLIN_COS_BUCKET)     { $env:LIMLIN_COS_BUCKET }     elseif ($cos) { $cos.bucket }    else { $null }
+    $region    = if ($env:LIMLIN_COS_REGION)     { $env:LIMLIN_COS_REGION }     elseif ($cos) { $cos.region }    else { $null }
+    $secretId  = if ($env:LIMLIN_COS_SECRET_ID)  { $env:LIMLIN_COS_SECRET_ID }  elseif ($cos) { $cos.secretId }  else { $null }
+    $secretKey = if ($env:LIMLIN_COS_SECRET_KEY) { $env:LIMLIN_COS_SECRET_KEY } elseif ($cos) { $cos.secretKey } else { $null }
+    $keyPrefix = if ($env:LIMLIN_COS_KEY_PREFIX) { $env:LIMLIN_COS_KEY_PREFIX } elseif ($cos) { $cos.keyPrefix } else { 'launcher/community/' }
+
+    if (-not $bucket)    { throw '未配置 COS 存储桶（tools\cos.local.json 或 LIMLIN_COS_BUCKET）' }
+    if (-not $region)    { throw '未配置 COS 地域（tools\cos.local.json 或 LIMLIN_COS_REGION）' }
+    if (-not $secretId)  { throw '未配置 SecretId（tools\cos.local.json 或 LIMLIN_COS_SECRET_ID）' }
+    if (-not $secretKey) { throw '未配置 SecretKey（tools\cos.local.json 或 LIMLIN_COS_SECRET_KEY）' }
+
+    $fileName = Split-Path $Path -Leaf
+    $objectKey = $keyPrefix.Trim('/') + '/' + $fileName
+    $hostName = "$bucket.cos.$region.myqcloud.com"
+    $encodedKey = (($objectKey -split '/') | ForEach-Object { [Uri]::EscapeDataString($_) }) -join '/'
+    $uriPath = '/' + $encodedKey
+    $url = "https://$hostName$uriPath"
+
+    $authorization = Get-CosAuthorization -SecretId $secretId -SecretKey $secretKey -HostName $hostName -UriPath $uriPath
+    $body = [System.IO.File]::ReadAllBytes((Resolve-Path $Path))
+    $headers = @{
+        Authorization   = $authorization
+        'Content-Type'  = 'application/json; charset=utf-8'
+        'Cache-Control' = 'max-age=60'
     }
-    & coscli cp $Path "cos://$bucket/$key" 2>&1 | ForEach-Object { "   $_" }
-    if ($LASTEXITCODE -ne 0) { throw "coscli 上传失败（exit $LASTEXITCODE）" }
-    Write-Ok '上传完成'
-    if ($env:LIMLIN_COS_URL) {
-        Write-Step '回读校验'
-        try {
-            $remote = (Invoke-WebRequest -Uri $env:LIMLIN_COS_URL -UseBasicParsing -TimeoutSec 20).Content
-            $remoteJson = $remote | ConvertFrom-Json
-            if ([int]$remoteJson.revision -eq [int]$json.revision) { Write-Ok "回读成功，线上 revision = $($remoteJson.revision)" }
-            else { Write-Host "   回读 revision 不一致：线上 $($remoteJson.revision)，期望 $($json.revision)（可能 CDN 缓存未刷新）" -ForegroundColor Yellow }
-        } catch {
-            Write-Host "   回读失败：$($_.Exception.Message)" -ForegroundColor Yellow
+    try {
+        $response = Invoke-WebRequest -Uri $url -Method Put -Body $body -Headers $headers -UseBasicParsing -TimeoutSec 30
+        Write-Ok "上传成功（HTTP $($response.StatusCode)）"
+        Write-Host "   对象地址：$url"
+    } catch {
+        Write-Host "   上传失败：$($_.Exception.Message)" -ForegroundColor Red
+        if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+            Write-Host "   HTTP $([int]$_.Exception.Response.StatusCode)" -ForegroundColor Red
         }
+        Write-Host '   排查：子账号是否有该桶 launcher/community/* 的 PutObject 权限？' -ForegroundColor Yellow
+        exit 1
     }
+
+    Write-Step '回读校验（匿名 GET）'
+    try {
+        $remote = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20).Content
+        $remoteJson = ($remote -replace "^\uFEFF", "") | ConvertFrom-Json
+        if ([int]$remoteJson.revision -eq [int]$json.revision) {
+            Write-Ok "回读成功，线上 revision = $($remoteJson.revision)"
+        } else {
+            Write-Host "   回读 revision 不一致：线上 $($remoteJson.revision)，期望 $($json.revision)" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "   回读失败：$($_.Exception.Message)" -ForegroundColor Red
+        Write-Host '   若返回 403，请把存储桶权限设为「公有读私有写」' -ForegroundColor Yellow
+        exit 1
+    }
+    Write-Host ''
+    Write-Host "客户端会自动从该地址同步：$url" -ForegroundColor Green
 }

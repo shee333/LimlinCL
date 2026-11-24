@@ -44,41 +44,45 @@
 
 ## 3. 腾讯云 COS 配置（管理员一次性操作）
 
-1. **创建存储桶**
-   - 控制台 → 对象存储 → 存储桶列表 → 创建
-   - 地域建议：`ap-guangzhou` 或 `ap-shanghai`
-   - 访问权限：**公有读私有写**（客户端需要匿名 GET）
-2. **创建目录前缀**：`launcher/community/`
-3. **上传 `servers.json`**
-   - 建议响应头：`Content-Type: application/json`、`Cache-Control: max-age=60`
-4. **获取访问地址**（默认域名，免备案）
-   ```
-   https://<存储桶名>-<APPID>.cos.<地域>.myqcloud.com/launcher/community/servers.json
-   ```
-   在浏览器直接打开该地址，应返回 JSON 即配置成功。
-5. **把这个地址填入客户端**
-   - 代码位置：`Plain Craft Launcher 2\Modules\ModCommunitySync.vb` 中的 `DefaultSourceUrls`
-   - 可填多个（主源 + 备用源）
+已配置的生产环境：
+
+| 项 | 值 |
+|---|---|
+| 存储桶 | `limlinlauncher-1254351530` |
+| 地域 | `ap-shanghai` |
+| 访问地址 | `https://limlinlauncher-1254351530.cos.ap-shanghai.myqcloud.com/launcher/community/servers.json` |
+| 访问权限 | 公有读私有写（匿名 GET 已验证可用） |
+
+客户端默认源已写死在 `Plain Craft Launcher 2\Modules\ModCommunitySync.vb` 的 `DefaultSourceUrls`，可填多个作为主备。
 
 > 后续如果要用自定义域名 + CDN 加速：域名需完成 ICP 备案，再绑定 CDN、回源到 COS。
 
 ## 4. 发布流程
 
-### 方式 A：脚本（推荐）
+### 方式 A：脚本（推荐，无需 coscli）
+
+脚本直连 COS REST API（v5 签名），只要 `tools\cos.local.json` 存在即可：
 
 ```powershell
-# 1. 编辑 servers.json（本机任意副本）
-# 2. 校验 + 自动 revision+1
-.\tools\publish-servers.ps1 -Path .\servers.json -Bump
-
-# 3. 上传（需要 coscli + 环境变量）
-$env:LIMLIN_COS_BUCKET = "limlin-1250000000"
-$env:LIMLIN_COS_KEY    = "launcher/community/servers.json"
-$env:LIMLIN_COS_URL    = "https://limlin-1250000000.cos.ap-guangzhou.myqcloud.com/launcher/community/servers.json"
+# 校验 + 自动 revision+1 + 上传 + 回读校验
 .\tools\publish-servers.ps1 -Path .\servers.json -Bump -Upload
 ```
 
-没装 coscli 时，脚本会打印手动上传步骤（COS 控制台拖拽上传即可）。
+`tools\cos.local.json`（**已被 .gitignore 忽略，不会提交**）：
+
+```json
+{
+  "bucket": "limlinlauncher-1254351530",
+  "region": "ap-shanghai",
+  "secretId": "AKID...",
+  "secretKey": "...",
+  "keyPrefix": "launcher/community/"
+}
+```
+
+也支持环境变量覆盖：`LIMLIN_COS_BUCKET`、`LIMLIN_COS_REGION`、`LIMLIN_COS_SECRET_ID`、`LIMLIN_COS_SECRET_KEY`、`LIMLIN_COS_KEY_PREFIX`。
+
+> ⚠️ 注意：`servers.json` 必须保存为 **UTF-8 无 BOM**。带 BOM 时客户端解析会失败（脚本已自动处理，读取去 BOM、写回不带 BOM）。
 
 ### 方式 B：控制台手动
 

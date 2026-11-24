@@ -346,3 +346,7 @@ MaskFiles/
 # 本地代码签名配置（含证书密码，禁止提交）
 signing.local.json
 tools/signing.local.json
+
+# 本地 COS 上传凭据（含密钥，禁止提交）
+cos.local.json
+tools/cos.local.json
