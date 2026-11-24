@@ -6,12 +6,12 @@ Public Module ModBase
 #Region "声明"
 
     '下列版本信息由更新器自动修改
-    Public Const VersionBaseName As String = "0.1.1" '显示用版本名
+    Public Const VersionBaseName As String = "0.1.2" '显示用版本名
     Public Const CommitHash As String = "" 'Commit Hash，由 GitHub Workflow 自动替换
 #If RELEASE Then
-    Public Const VersionCode As Integer = 2 '正式版
+    Public Const VersionCode As Integer = 3 '正式版
 #Else
-    Public Const VersionCode As Integer = 3 '快照版
+    Public Const VersionCode As Integer = 4 '快照版
 #End If
 
     '版本信息
@@ -47,7 +47,7 @@ Public Module ModBase
     ''' <summary>
     ''' 程序的缓存文件夹路径，以 \ 结尾。
     ''' </summary>
-    Public PathTemp As String = PathUtils.AddSlashSuffix(If(Settings.Get(Of String)("SystemSystemCache") = "", Path.GetTempPath() & "PCL\", Settings.Get(Of String)("SystemSystemCache")).Replace("/", "\"))
+    Public PathTemp As String = PathUtils.AddSlashSuffix(If(String.IsNullOrWhiteSpace(Settings.Get(Of String)("SystemSystemCache")), Paths.Base & "PCL\Cache\", Settings.Get(Of String)("SystemSystemCache")).Replace("/", "\"))
     ''' <summary>
     ''' 当前程序的语言。
     ''' </summary>
