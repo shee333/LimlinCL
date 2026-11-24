@@ -1,0 +1,35 @@
+{
+    "schemaVersion":  1,
+    "revision":  4,
+    "updatedAt":  "2026-11-25T05:55:27+08:00",
+    "servers":  [
+                    {
+                        "id":  "limlin-main",
+                        "name":  "栎木主世界",
+                        "group":  "生存",
+                        "ip":  "nop.mc6.cn",
+                        "port":  32407,
+                        "order":  10,
+                        "enabled":  true,
+                        "showPlayers":  true,
+                        "notes":  "目前运行的是星穹列车谋杀案，这是款类狼人杀的多人游戏",
+                        "gameVersion":  "1.20.1",
+                        "gameLoader":  "Forge",
+                        "motdOverride":  ""
+                    },
+                    {
+                        "id":  "limlin-creative",
+                        "name":  "栎木创造服",
+                        "group":  "创造",
+                        "ip":  "mini.limlin.art",
+                        "port":  32094,
+                        "order":  20,
+                        "enabled":  true,
+                        "showPlayers":  true,
+                        "notes":  "示例数据：这是第二条示例，同样可自由增删。",
+                        "gameVersion":  "1.20.1",
+                        "gameLoader":  "Fabric",
+                        "motdOverride":  ""
+                    }
+                ]
+}

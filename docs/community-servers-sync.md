@@ -92,6 +92,56 @@
 
 **每次发布必须递增 revision**，否则客户端会认为「已是最新」而不更新。
 
+## 4.1 日常发布流程（3 步，推荐）
+
+仓库里维护一份可编辑的源文件：`community\servers.json`
+
+### 第 1 步：编辑列表
+
+用记事本 / VS Code 打开 `D:\MiencraftDEV\LimCL\LimlinCL\community\servers.json`，增删改服务器条目并保存。
+
+### 第 2 步：双击发布
+
+双击仓库根目录的 **`publish-community.bat`**
+
+它会自动完成：
+
+1. 校验 JSON（语法、id 唯一、ip、端口）
+2. `revision` 自动 +1、`updatedAt` 刷新
+3. 上传到 COS（`launcher/community/servers.json`）
+4. 匿名回读校验，确认线上版本号一致
+
+### 第 3 步：确认结果
+
+看到这样的输出即成功：
+
+```
+   revision 已递增到 5，updatedAt 已刷新
+>> 上传到腾讯云 COS
+   上传成功（HTTP 200）
+>> 回读校验（匿名 GET）
+   回读成功，线上 revision = 5
+```
+
+### 客户端何时生效
+
+- 用户进入「社区游戏」页且距上次检查 ≥ 1 小时 → 自动拉取
+- 用户点「检查列表更新」→ 立即拉取（有 15 秒冷却）
+
+> 不需要重新发布启动器！列表与程序分离。
+
+## 4.2 命令行方式（等价）
+
+```powershell
+cd D:\MiencraftDEV\LimCL\LimlinCL
+.\tools\publish-servers.ps1 -Path .\community\servers.json -Bump -Upload
+```
+
+只校验不上传：
+
+```powershell
+.\tools\publish-servers.ps1 -Path .\community\servers.json
+```
 ## 5. 需要提供给开发的信息
 
 | 信息 | 示例 | 用途 |
