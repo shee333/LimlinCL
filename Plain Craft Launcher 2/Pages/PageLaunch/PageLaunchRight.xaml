@@ -9,6 +9,24 @@
         <StackPanel Name="PanMain" Margin="25,25,25,10" Grid.IsSharedSizeScope="True">
             <local:MyHint x:Name="PanHint" RelativeSetup="HintSnapshot" Theme="Blue" CanClose="True" Margin="0,0,0,15"
                           Text="快照版 PCL 包含尚未正式发布的测试功能，仅限赞助者自己使用。&#xa;请不要随意发给其他人，或是用来制作整合包哦！" />
+            <local:MyCard Title="栎木栎林社区" Margin="0,0,0,15" CanSwap="True">
+                <StackPanel Margin="25,40,23,15">
+                    <TextBlock TextWrapping="Wrap" FontSize="13.5" Foreground="{DynamicResource ColorBrush1}"
+                               Text="栎木栎林（Limlin）成立于 2017 年 1 月 13 日。我们相信「有趣，有温度」——这里没有广告，也没有套路，只有一群真心喜欢 Minecraft 的人。" />
+                    <local:MyHint Margin="0,10,0,0" Theme="Blue"
+                                  Text="本启动器基于 PCL 的开源代码构建，专为社区定制：绿色单文件、免安装运行时、数据随身携带、无推广内容。" />
+                    <TextBlock TextWrapping="Wrap" Margin="0,10,0,0" FontSize="12.5" Foreground="{DynamicResource ColorBrush1}"
+                               Text="社区专属：统一的开服与联机入口、社区整合包推荐、公告与活动信息直接呈现，无需再翻群文件。" />
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <local:MyButton Height="35" Padding="20,0,20,0" ColorType="Highlight" Text="支持社区"
+                                        local:CustomEventService.EventType="打开网页"
+                                        local:CustomEventService.EventData="https://afdian.com/@shee33" />
+                        <local:MyButton Height="35" Margin="10,0,0,0" Padding="20,0,20,0" Text="GitHub 仓库"
+                                        local:CustomEventService.EventType="打开网页"
+                                        local:CustomEventService.EventData="https://github.com/shee333/LimlinCL" />
+                    </StackPanel>
+                </StackPanel>
+            </local:MyCard>
             <StackPanel x:Name="PanCustom">
             </StackPanel>
             <local:MyCard Margin="0,0,0,15" Title="启动日志" x:Name="PanLog">

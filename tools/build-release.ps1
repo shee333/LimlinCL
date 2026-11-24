@@ -102,7 +102,7 @@ function Get-NextVersion([string]$version) {
 }
 
 # ---- 主流程 -----------------------------------------------------------
-if (-not (Test-Path $Script:Solution)) { throw "未找到解决方案：$Script:Solution" }
+if (-not (Test-Path $Script:Project))  { throw "未找到项目文件：$Script:Project" }
 if (-not (Test-Path $Script:ModBase))  { throw "未找到 ModBase.vb：$Script:ModBase" }
 
 if (-not (Test-Path $ProductDir)) { New-Item -ItemType Directory -Force -Path $ProductDir | Out-Null }
@@ -130,7 +130,9 @@ $env:NUGET_PACKAGES    = 'D:\MiencraftDEV\.nuget-packages'
 $env:DOTNET_CLI_HOME   = 'D:\MiencraftDEV\.dotnet-home'
 
 $logFile = Join-Path $env:TEMP 'limlin-build.log'
-& $msbuild $Script:Solution /p:Configuration=Release /p:Platform="Any CPU" /m /v:m /nologo /nologo 2>&1 |
+# 注意：必须直接编译 vbproj 且不传 Platform。解决方案里的 "Any CPU" 平台名带空格，
+# 会让项目内 'Release|AnyCPU' 的配置条件失配，导致编译成快照版（无 RELEASE 常量）。
+& $msbuild $Script:Project /p:Configuration=Release /m /v:m /nologo 2>&1 |
     Tee-Object -FilePath $logFile | Out-Null
 
 if ($LASTEXITCODE -ne 0) {

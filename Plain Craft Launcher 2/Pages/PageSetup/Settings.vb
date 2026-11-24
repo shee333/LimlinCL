@@ -264,7 +264,9 @@ Public Class Settings
                     Try
                         RegistryUtils.Write($"HKEY_CURRENT_USER\Software\{RegFolder}", Key, Value)
                     Catch ex As Exception
-                        Logger.Warn(ex, $"写入注册表失败（{Key} → {Value}）", LogBehavior.Toast)
+                        ' 注册表不可写时降级到便携配置文件，避免每次启动都弹权限提示
+                        Logger.Info($"写入注册表失败，改写入配置文件（{Key}）：{ex.Message}")
+                        WriteIni("Setup", Key, Value)
                     End Try
                 Case Sources.Instance
                     If Instance Is Nothing Then Throw New Exception($"保存版本独立设置 {Key} 时未提供目标版本")
@@ -331,7 +333,13 @@ Public Class Settings
                 Case Sources.Normal
                     GotValue = ReadIni("Setup", Key, DefaultValue)
                 Case Sources.Registry
-                    GotValue = RegistryUtils.TryRead($"HKEY_CURRENT_USER\Software\{RegFolder}", Key, DefaultValue)
+                    Try
+                        GotValue = RegistryUtils.TryRead($"HKEY_CURRENT_USER\Software\{RegFolder}", Key, Nothing)
+                    Catch ex As Exception
+                        GotValue = Nothing
+                        Logger.Info($"读取注册表失败，改读取配置文件（{Key}）：{ex.Message}")
+                    End Try
+                    If GotValue Is Nothing Then GotValue = ReadIni("Setup", Key, DefaultValue)
                 Case Sources.Instance
                     If Instance Is Nothing Then
                         Throw New Exception($"读取版本设置 {Key} 时未提供目标版本")
@@ -393,8 +401,9 @@ Public Class Settings
                     Try
                         RegistryUtils.Delete($"HKEY_CURRENT_USER\Software\{RegFolder}", Key)
                     Catch ex As Exception
-                        Logger.Warn(ex, $"删除注册表失败（{Key}）", LogBehavior.Toast)
+                        Logger.Info($"删除注册表失败（{Key}）：{ex.Message}")
                     End Try
+                    DeleteIniKey("Setup", Key)
                 Case Sources.Instance
                     If Instance Is Nothing Then Throw New Exception($"重置版本设置 {Key} 时未提供目标版本")
                     DeleteIniKey(Instance.PathVersion & "PCL\Setup.ini", Key)
@@ -423,11 +432,11 @@ Public Class Settings
                 Return HasIniKey("Setup", Key)
             Case Sources.Registry
                 Try
-                    Return RegistryUtils.Has($"HKEY_CURRENT_USER\Software\{RegFolder}", Key)
+                    If RegistryUtils.Has($"HKEY_CURRENT_USER\Software\{RegFolder}", Key) Then Return True
                 Catch ex As Exception
-                    Logger.Warn(ex, $"判断注册表 {Key} 是否存在时出错")
-                    Return False
+                    Logger.Info($"判断注册表 {Key} 是否存在时出错：{ex.Message}")
                 End Try
+                Return HasIniKey("Setup", Key)
             Case Else 'Source.Instance
                 If Instance Is Nothing Then Throw New Exception($"判断版本设置 {Key} 是否存在时未提供目标版本")
                 Return HasIniKey(Instance.PathVersion & "PCL\Setup.ini", Key)
