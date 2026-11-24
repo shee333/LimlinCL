@@ -112,7 +112,6 @@ Public Class CommunityServerCard
     Private Shared ReadOnly BrushOnline As New SolidColorBrush(Color.FromRgb(&H4C, &HAF, &H50))
     Private Shared ReadOnly BrushOffline As New SolidColorBrush(Color.FromRgb(&HE5, &H39, &H35))
     Private Shared ReadOnly BrushPending As New SolidColorBrush(Color.FromRgb(&H9E, &H9E, &H9E))
-    Private Shared ReadOnly BrushNote As New SolidColorBrush(Color.FromRgb(&HB2, &H6A, &H00))
 
     Public Sub New(Server As ModCommunity.CommunityServer)
         Me.Server = Server
@@ -162,11 +161,10 @@ Public Class CommunityServerCard
         '游玩注意
         If Not String.IsNullOrWhiteSpace(Server.Notes) Then
             LabNotes = New TextBlock With {
-                .Text = "注意：" & Server.Notes,
+                .Text = Server.Notes,
                 .TextWrapping = TextWrapping.Wrap,
                 .FontSize = 12.5,
-                .Margin = New Thickness(0, 8, 0, 0),
-                .Foreground = BrushNote
+                .Margin = New Thickness(0, 8, 0, 0)
             }
             Panel.Children.Add(LabNotes)
         End If

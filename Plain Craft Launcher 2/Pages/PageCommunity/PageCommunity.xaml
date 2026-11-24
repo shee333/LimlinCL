@@ -14,6 +14,9 @@
                                Text="「一键加入」正在开发中：届时将自动准备所需客户端并直接进入服务器。" />
                     <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <local:MyButton x:Name="BtnRefresh" Text="刷新状态" Height="35" Padding="20,0,20,0" ColorType="Highlight" />
+                        <local:MyButton x:Name="BtnCheckUpdate" Text="检查列表更新" Height="35" Margin="10,0,0,0" Padding="20,0,20,0"
+                                        IsEnabled="False" ToolTipService.ShowOnDisabled="True"
+                                        ToolTip="即将开放：接入社区更新源后，从托管地址同步最新服务器列表" />
                         <local:MyTextButton x:Name="BtnEditConfig" Text="编辑服务器列表" Margin="14,0,0,0" VerticalAlignment="Center" />
                     </StackPanel>
                     <TextBlock x:Name="LabRefreshTime" Text="尚未查询" Margin="0,10,0,0" FontSize="11.5" Opacity="0.6" />
