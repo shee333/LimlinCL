@@ -40,7 +40,6 @@ Public Class PageCommunity
         End If
         IsSyncing = True
         BtnCheckUpdate.IsEnabled = False
-        LabSyncInfo.Text = "正在检查列表更新……"
         RunInNewThread(
             Sub()
                 Dim Result As CommunitySyncResult
@@ -58,7 +57,6 @@ Public Class PageCommunity
                         Else
                             BtnCheckUpdate.IsEnabled = True
                         End If
-                        LabSyncInfo.Text = ModCommunitySync.GetStatusText()
                         If Result.Updated Then
                             Hint(Result.Message, HintType.Green)
                             RefreshAll(ForceRebuild:=True)
@@ -173,7 +171,6 @@ Public Class PageCommunity
                     Sub()
                         If Token <> QueryToken Then Return '已被更新的刷新取代
                         LabRefreshTime.Text = "最后更新：" & Date.Now.ToString("HH:mm:ss")
-                        LabSyncInfo.Text = ModCommunitySync.GetStatusText()
                         BtnRefresh.IsEnabled = True
                         IsQuerying = False
                     End Sub)
