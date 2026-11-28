@@ -259,6 +259,7 @@
     <Compile Include="Modules\ModSecret.vb" />
     <Compile Include="Modules\ModCommunity.vb" />
     <Compile Include="Modules\ModCommunitySync.vb" />
+    <Compile Include="Modules\ModLink.vb" />
     <Compile Include="Modules\ModUpdate.vb" />
     <Compile Include="Pages\PageDownload\Resource\PageResource.xaml.vb">
       <DependentUpon>PageResource.xaml</DependentUpon>
@@ -931,6 +932,10 @@
       <Project>{2dffe2a0-1101-816b-d240-f644b2d74a68}</Project>
       <Name>MeloongCore.Wpf</Name>
     </ProjectReference>
+    <ProjectReference Include="..\Limlin.Link\Limlin.Link.csproj">
+      <Project>{7a3c9e10-4b1f-4a52-9a11-2c9f8b0d6e44}</Project>
+      <Name>Limlin.Link</Name>
+    </ProjectReference>
     <ProjectReference Include="..\PCLCS\PCLCS.csproj">
       <Project>{32de4aaf-f4d6-42c5-9604-19236de96c69}</Project>
       <Name>PCLCS</Name>
@@ -950,6 +955,11 @@
       <LogicalName>MeloongCore.Wpf.dll</LogicalName>
       <Link>Resources\MeloongCore.Wpf.dll</Link>
     </None>
+    <EmbeddedResource Include="..\Limlin.Link\bin\Limlin.Link.dll">
+      <LogicalName>Limlin.Link.dll</LogicalName>
+      <Link>Resources\Limlin.Link.dll</Link>
+      <Visible>false</Visible>
+    </EmbeddedResource>
     <None Include="..\PCLCS\bin\Microsoft.Win32.Registry.dll">
       <LogicalName>Microsoft.Win32.Registry.dll</LogicalName>
       <Link>Resources\Microsoft.Win32.Registry.dll</Link>

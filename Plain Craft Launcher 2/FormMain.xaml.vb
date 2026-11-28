@@ -355,6 +355,14 @@ Public Class FormMain
         Logger.Info($"第二阶段加载用时：{GetTimeMs() - ApplicationStartTick} ms")
     End Sub
     Private Sub FormMain_Loaded(sender As Object, e As RoutedEventArgs) Handles Me.Loaded
+        '联机自检：仅当 PCL 数据目录存在 link-selftest.on 标记时运行（开发验证用）
+        Try
+            Dim LinkMarker As String = PathPure.Value & "link-selftest.on"
+            Logger.Info("[联机] 自检标记检查：" & LinkMarker & " → " & File.Exists(LinkMarker).ToString())
+            If File.Exists(LinkMarker) Then RunInNewThread(AddressOf ModLink.RunSelfTest, "联机自检")
+        Catch ex As Exception
+            Logger.Error(ex, "[联机] 自检触发失败")
+        End Try
         ApplicationStartTick = GetTimeMs()
         Handle = New WindowInteropHelper(Me).Handle
         '读取设置

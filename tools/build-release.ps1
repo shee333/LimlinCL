@@ -187,6 +187,15 @@ if (-not $NoBump) {
     }
 }
 
+# 确保 C# 项目已还原（Limlin.Link 是 SDK 风格项目）
+$linkProject = Join-Path $Script:Repo 'Limlin.Link\Limlin.Link.csproj'
+$linkAssets = Join-Path $Script:Repo 'Limlin.Link\obj\project.assets.json'
+if ((Test-Path $linkProject) -and -not (Test-Path $linkAssets)) {
+    Write-Step '还原 Limlin.Link 依赖'
+    $env:NUGET_PACKAGES = 'D:\MiencraftDEV\.nuget-packages'
+    $env:DOTNET_CLI_HOME = 'D:\MiencraftDEV\.dotnet-home'
+    & dotnet restore $linkProject 2>&1 | Out-Null
+}
 Write-Step "编译 $($Script:AppName) $version（Release）"
 $buildStart = Get-Date
 $env:NUGET_PACKAGES    = 'D:\MiencraftDEV\.nuget-packages'

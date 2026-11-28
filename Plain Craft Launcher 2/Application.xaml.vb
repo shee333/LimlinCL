@@ -216,7 +216,7 @@ RetryCacheCheck:
 
     '动态 DLL 加载
     Private Sub New() '这里必须尽早调用，且不能使用任何库，否则加载 MeloongCore 就会导致崩溃
-        Static Prefixes As String() = {"NAudio", "Newtonsoft.Json", "Ookii.Dialogs.Wpf", "Imazen.WebP", "CacheCow.Common", "CacheCow.Client.FileStore", "CacheCow.Client", "ThrottleDebounce", "System.Net.Http.Formatting", "Microsoft.Win32.Registry", "PCLCS", "MeloongCore.Wpf", "MeloongCore"}
+        Static Prefixes As String() = {"NAudio", "Newtonsoft.Json", "Ookii.Dialogs.Wpf", "Imazen.WebP", "CacheCow.Common", "CacheCow.Client.FileStore", "CacheCow.Client", "ThrottleDebounce", "System.Net.Http.Formatting", "Microsoft.Win32.Registry", "PCLCS", "MeloongCore.Wpf", "MeloongCore", "Limlin.Link"}
         Static LoadedAssemblies As New ConcurrentDictionary(Of String, Lazy(Of Assembly))(StringComparer.Ordinal) '缓存
         AddHandler AppDomain.CurrentDomain.AssemblyResolve,
         Function(sender As Object, Args As ResolveEventArgs) As Assembly
@@ -224,6 +224,19 @@ RetryCacheCheck:
             If Prefix Is Nothing Then Return Nothing
             Dim LazyAssembly = LoadedAssemblies.GetOrAdd(Prefix, Function(p) New Lazy(Of Assembly)(
             Function()
+                If p = "Limlin.Link" Then '联机库以清单资源形式嵌入
+                    Using Stream = Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Limlin.Link.dll")
+                        If Stream Is Nothing Then Throw New InvalidOperationException("未找到内嵌的 Limlin.Link.dll")
+                        Dim Bytes(CInt(Stream.Length) - 1) As Byte
+                        Dim ReadTotal As Integer = 0
+                        While ReadTotal < Bytes.Length
+                            Dim ReadNow As Integer = Stream.Read(Bytes, ReadTotal, Bytes.Length - ReadTotal)
+                            If ReadNow <= 0 Then Exit While
+                            ReadTotal += ReadNow
+                        End While
+                        Return Assembly.Load(Bytes)
+                    End Using
+                End If
                 Dim LoadedAssembly = Assembly.Load(DirectCast(My.Resources.ResourceManager.GetObject(p), Byte()))
                 If p = "Imazen.WebP" Then ExtractLibwebp() 'WebP 特判
                 Return LoadedAssembly
