@@ -101,7 +101,19 @@ namespace Limlin.Link
             if (port <= 0)
             {
                 Report("请在游戏中打开「对局域网开放」，正在等待…");
-                port = await LocalWorldFinder.WaitForLocalWorldAsync(ct).ConfigureAwait(false);
+                using (var findCts = CancellationTokenSource.CreateLinkedTokenSource(ct))
+                {
+                    Task<int> findTask = LocalWorldFinder.WaitForLocalWorldAsync(findCts.Token);
+                    Task timeoutTask = Task.Delay(TimeSpan.FromMinutes(5), ct);
+                    Task done = await Task.WhenAny(findTask, timeoutTask).ConfigureAwait(false);
+                    if (done != findTask)
+                    {
+                        ct.ThrowIfCancellationRequested(); // 取消优先于超时
+                        try { findCts.Cancel(); } catch { }
+                        throw new TimeoutException("等待「对局域网开放」超时，请先在游戏中开启后再点「创建房间」");
+                    }
+                    port = await findTask.ConfigureAwait(false);
+                }
             }
             if (port <= 0) throw new InvalidOperationException("未发现可用的局域网端口");
             GamePort = port;
@@ -174,9 +186,13 @@ namespace Limlin.Link
                 return;
             }
             Report("正在下载联机组件（首次使用需要）…");
+            int lastPercent = -1;
             var progress = new Progress<DownloadProgress>(p =>
             {
-                if (p.Total > 0) Report($"正在下载联机组件 {p.Fraction:P0}");
+                int percent = p.Total > 0 ? (int)(p.Fraction * 100) : -1;
+                if (percent == lastPercent) return;
+                lastPercent = percent;
+                Report(percent >= 0 ? $"正在下载联机组件 {percent}%" : "正在下载联机组件…");
             });
             await EasyTierPackage.InstallAsync(progress, ct).ConfigureAwait(false);
             Report("联机组件已就绪");
